@@ -528,7 +528,14 @@ impl Consumer<OrderedConfig> {
                 loop {
                     let current_state = state.borrow().to_owned();
 
-                    context.client.state.changed().await.unwrap();
+                    // Server went away (i.e. the Sender has been dropped), so let's shut down
+                    if context.client.state.changed().await.is_err() {
+                        // That's the best error I could come up with without changing signature
+                        let err = ConsumerRecreateError::new(ConsumerRecreateErrorKind::TimedOut);
+                        shutdown_tx.send(err.into()).unwrap();
+                        break;
+                    }
+
                     // State change notification received within the timeout
                     if state.borrow().to_owned() != State::Connected
                         || current_state == State::Connected
